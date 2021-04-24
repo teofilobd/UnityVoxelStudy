@@ -1,0 +1,273 @@
+///
+/// Voxel Renderer Kernel
+/// 
+/// I adapted my ray tracing renderer in https://github.com/teofilobd/URP-RayTracer
+/// to use the raymarching approach in https://www.shadertoy.com/view/Xds3zN .
+/// And then simplified to take into account only voxels.
+/// 
+
+#pragma kernel CSMain
+
+#include "RaymarchingHelper.cginc"
+
+RWTexture2D<float4> Result;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+float4 _DirectionalLightDirection;
+
+struct Ray
+{
+    float3 origin;
+    float3 direction;
+};
+
+struct Voxel
+{
+    float3 origin;
+    float size;
+    float3 color;
+};
+
+StructuredBuffer<Voxel> _Voxels;
+
+TracingResult map(in float3 pos)
+{
+    TracingResult result;
+    result.distance = 1e10;
+    result.m = 0.0;
+    result.color = float3(0.0, 0.0, 0.0);
+ 
+    uint count, stride, i;
+
+    _Voxels.GetDimensions(count, stride);
+    for (i = 0; i < count; i++)
+    {
+        Voxel voxel = _Voxels[i];
+        TracingResult tracingResult;
+        tracingResult.distance = sdVoxel(pos - voxel.origin, voxel.size);
+        tracingResult.m = 3;
+        tracingResult.color = voxel.color;
+        result = opU(result, tracingResult);
+    }
+
+    return result;
+}
+
+// http://iquilezles.org/www/articles/boxfunctions/boxfunctions.htm
+float2 iBox(in float3 ro, in float3 rd, in float3 rad)
+{
+    float3 m = 1.0 / rd;
+    float3 n = m * ro;
+    float3 k = abs(m) * rad;
+    float3 t1 = -n - k;
+    float3 t2 = -n + k;
+    return float2(max(max(t1.x, t1.y), t1.z),
+        min(min(t2.x, t2.y), t2.z));
+}
+
+TracingResult raycast(in Ray ray)
+{
+    TracingResult result;
+    result.distance = -1.0;
+    result.m = -1.0;
+    result.color = float3(0.0, 0.0, 0.0);
+
+    float tmin = 1.0;
+    float tmax = 20.0;
+
+    // raytrace floor plane
+    float tp1 = (0.0 - ray.origin.y) / ray.direction.y;
+    if (tp1 > 0.0)
+    {
+        tmax = min(tmax, tp1);
+        result.distance = tp1;
+        result.m = 1.0;
+        result.color = float3(0.1, 0.1, 0.0);
+    }
+
+    // raymarch primitives   
+    float2 tb = iBox(ray.origin - float3(0.0, 0.4, -0.5), ray.direction, float3(10,10,10));
+    if (tb.x < tb.y && tb.y>0.0 && tb.x < tmax)
+    {
+        tmin = max(tb.x, tmin);
+        tmax = min(tb.y, tmax);
+
+        float t = tmin;
+        for (int i = 0; i < 70 && t < tmax; i++)
+        {
+            TracingResult h = map(ray.origin + ray.direction * t);
+            if (abs(h.distance) < (0.0001 * t))
+            {
+                result.distance = t;
+                result.m = h.m;
+                result.color = h.color;
+                break;
+            }
+            t += h.distance;
+        }
+    }
+
+    return result;
+}
+
+// http://iquilezles.org/www/articles/rmshadows/rmshadows.htm
+float calcSoftshadow(in float3 ro, in float3 rd, in float mint, in float tmax)
+{
+    // bounding volume
+    float tp = (0.8 - ro.y) / rd.y; 
+    
+    if (tp > 0.0) 
+        tmax = min(tmax, tp);
+
+    float res = 1.0;
+    float t = mint;
+    for (int i = 0; i < 24; i++)
+    {
+        float h = map(ro + rd * t).distance;
+        float s = clamp(8.0 * h / t, 0.0, 1.0);
+        res = min(res, s * s * (3.0 - 2.0 * s));
+        t += clamp(h, 0.02, 0.2);
+        if (res<0.004 || t>tmax) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+// http://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+float3 calcNormal(in float3 pos)
+{
+#if 0
+    float2 e = float2(1.0, -1.0) * 0.5773 * 0.0005;
+    return normalize(e.xyy * map(pos + e.xyy).distance +
+        e.yyx * map(pos + e.yyx).distance +
+        e.yxy * map(pos + e.yxy).distance +
+        e.xxx * map(pos + e.xxx).distance);
+#else
+    // inspired by tdhooper and klems - a way to prevent the compiler from inlining map() 4 times
+    float3 n = float3(0,0,0);
+    for (int i = 0; i < 4; i++)
+    {
+        float3 e = 0.5773 * (2.0 * float3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0);
+        n += e * map(pos + 0.0005 * e).distance;
+        //if( n.x+n.y+n.z>100.0 ) break;
+    }
+    return normalize(n);
+#endif    
+}
+
+float calcAO(in float3 pos, in float3 nor)
+{
+    float occ = 0.0;
+    float sca = 1.0;
+    for (int i = 0; i < 5; i++)
+    {
+        float h = 0.01 + 0.12 * float(i) / 4.0;
+        float d = map(pos + h * nor).distance;
+        occ += (h - d) * sca;
+        sca *= 0.95;
+        if (occ > 0.35) break;
+    }
+    return clamp(1.0 - 3.0 * occ, 0.0, 1.0) * (0.5 + 0.5 * nor.y);
+}
+
+float3 render(in Ray ray)
+{
+    // background
+    float3 col = float3(0.7, 0.7, 0.9) - max(ray.direction.y, 0.0) * 0.3;
+
+    // raycast scene
+    TracingResult res = raycast(ray);
+    float t = res.distance;
+    float m = res.m;
+    if (m > -0.5)
+    {
+        float3 pos = ray.origin + t * ray.direction;
+        float3 normalDirection = (m < 1.5) ? float3(0.0, 1.0, 0.0) : calcNormal(pos);
+        float3 reflectedRay = reflect(ray.direction, normalDirection);
+
+        // material        
+        col = res.color;
+        float ks = 1.0;
+
+        // lighting
+        float occ = calcAO(pos, normalDirection);
+
+        float3 lin = float3(0, 0, 0);
+
+        // sun
+        {
+            float3  lightDirection = _DirectionalLightDirection.xyz;
+            float3  hal = normalize(lightDirection - ray.direction);
+            float dif = sdot(normalDirection, lightDirection);
+            //if( dif>0.0001 )
+            dif *= calcSoftshadow(pos, lightDirection, 0.02, 2.5);
+            float spe = pow(sdot(normalDirection, hal), 16.0);
+            spe *= dif;
+            spe *= 0.04 + 0.96 * pow(clamp(1.0 - dot(hal, lightDirection), 0.0, 1.0), 5.0);
+            lin += col * 2.20 * dif * float3(1.30, 1.00, 0.70);
+            lin += 5.00 * spe * float3(1.30, 1.00, 0.70) * ks;
+        }
+
+        // back
+        {
+            float dif = clamp(dot(normalDirection, normalize(float3(0.5, 0.0, 0.6))), 0.0, 1.0) * clamp(1.0 - pos.y, 0.0, 1.0);
+            dif *= occ;
+            lin += col * 0.55 * dif * float3(0.25, 0.25, 0.25);
+        }
+        // sss
+        {
+            float dif = pow(clamp(1.0 + dot(normalDirection, ray.direction), 0.0, 1.0), 2.0);
+            dif *= occ;
+            lin += col * 0.25 * dif * float3(1.00, 1.00, 1.00);
+        }
+
+        col = lin;
+
+        col = lerp(col, float3(0.7, 0.7, 0.9), 1.0 - exp(-0.0001 * t * t * t));
+    }
+
+    return float3(clamp(col, 0.0, 1.0));
+}
+
+
+Ray CreateRay(float3 origin, float3 direction)
+{
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+Ray CreateCameraRay(float2 uv)
+{
+    // Transform the camera origin to world space
+    float3 origin = mul(_CameraToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+
+    // Invert the perspective projection of the view-space position
+    float3 direction = mul(_CameraInverseProjection, float4(uv, 0.0f, 1.0f)).xyz;
+    // Transform the direction from camera to world space and normalize
+    direction = mul(_CameraToWorld, float4(direction, 0.0f)).xyz;
+    direction = normalize(direction);
+
+    return CreateRay(origin, direction);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{ 
+    // Get the dimensions of the RenderTexture
+    uint width, height;
+    Result.GetDimensions(width, height);
+
+    // Transform pixel to [-1,1] range
+    float2 uv = float2((id.xy) / float2(width, height) * 2.0f - 1.0f);
+
+    // Get a ray for the UVs
+    Ray ray = CreateCameraRay(uv);
+
+    float3 col = render(ray);
+    // gamma
+    col = pow(col, float3(0.4545, 0.4545, 0.4545));
+
+    Result[id.xy] = float4(col, 1);
+}
