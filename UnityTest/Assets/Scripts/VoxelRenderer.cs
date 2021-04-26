@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
@@ -6,23 +7,68 @@ using UnityEngine.Rendering;
 namespace VoxelEngine
 {
     /// <summary>
-    /// Class in charge of setting up voxels compute buffer and dispatching voxel renderer compute shader.
+    /// Class in charge of setting up voxels compute buffers and dispatching voxel renderer compute shader.
+    /// The class will look for IVoxelizers in the scene and generate voxels for them.
     /// 
     /// I adapted a few functionalities from my ray tracer https://github.com/teofilobd/URP-RayTracer
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public class VoxelRenderer : MonoBehaviour
     {
+        #region Structs
+        /// <summary>
+        /// Describes a voxel. Other than its center and size, a voxel also has 
+        /// color and uv (picked from a vertex within the voxel, if any),
+        /// and an ID for volume (set of voxels of same mesh) properties in 
+        /// a list of properties.
+        /// This struct has an equivalent in the compute shader.
+        /// </summary>
         public struct Voxel
         {
-            public Vector3 Origin;
+            public Vector3 Center;
             public float Size;
             public Vector3 Color;
+            public Vector2 UV;
+            public int VoxelsVolumePropertiesID;
         }
 
+        public struct VoxelMaterial
+        {
+            public Texture2D Texture;
+            public Color Color;
+        }
+
+        /// <summary>
+        /// Properties of a set of voxels representing a mesh.
+        /// MaterialTextureID keeps an id for a texture in a texture array.
+        /// This struct has an equivalent in the compute shader.
+        /// </summary>
+        public struct VoxelsVolumeProperties
+        {
+            public int MaterialTextureID;
+            public Vector3 MaterialColor;
+            public Vector3 VolumeBoundMin;
+            public Vector3 VolumeBoundMax;
+        }
+        #endregion
+
+        #region Properties
         public ComputeShader VoxelRendererShader;
         public Light DirectionalLight;
-        public static float kVoxelSize = 0.25f;
+        public static float kVoxelSize = 0.2f;
+        public static Vector3 kVoxelDimensions = new Vector3(kVoxelSize, kVoxelSize, kVoxelSize);
+        public static Vector3 kVoxelHalfDimensions = kVoxelDimensions / 2f;
+        public static Vector3[] kVoxelVertices =
+        {
+            Vector3.zero,
+            new Vector3(VoxelRenderer.kVoxelSize, 0, 0),
+            new Vector3(VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize, 0),
+            new Vector3(0, VoxelRenderer.kVoxelSize, 0),
+            new Vector3(0, 0, VoxelRenderer.kVoxelSize),
+            new Vector3(VoxelRenderer.kVoxelSize, 0, VoxelRenderer.kVoxelSize),
+            new Vector3(0, VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize),
+            new Vector3(VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize)
+        };
 
         private int m_KiMain = -1;
         private int m_ScreenWidth;
@@ -30,9 +76,21 @@ namespace VoxelEngine
         private Camera m_Camera;
         private RenderTexture m_Target;
         private ComputeBuffer m_VoxelsBuffer;
-        private static List<IVoxelizer> m_Voxelizers = new List<IVoxelizer>();
-        private static bool m_VoxelsBufferNeedUpdate = false;
+        private ComputeBuffer m_VoxelsVolumePropertiesBuffer;
+        private Texture2DArray m_TextureBuffer;
+        private List<IVoxelizer> m_Voxelizers = new List<IVoxelizer>();
+        private List<Texture2D> m_Textures = new List<Texture2D>();
+        private List<VoxelsVolumeProperties> m_VoxelVolumeProperties = new List<VoxelsVolumeProperties>();
+        private bool m_VoxelsBufferNeedUpdate = false;
         private List<Voxel> m_Voxels = new List<Voxel>();
+        private const float m_ThreadNumber = 32.0f;
+        private int m_ThreadGroupsX = Mathf.CeilToInt(Screen.width / m_ThreadNumber);
+        private int m_ThreadGroupsY = Mathf.CeilToInt(Screen.height / m_ThreadNumber);
+        private readonly int m_CameraToWorldPropertyID = Shader.PropertyToID("_CameraToWorld");
+        private readonly int m_CameraInverseProjectioPropertyID = Shader.PropertyToID("_CameraInverseProjection");
+        private readonly int m_DirectionalLightPropertyID = Shader.PropertyToID("_DirectionalLightDirection");
+        private readonly int m_VoxelsCountPropertyID = Shader.PropertyToID("_VoxelsCount");
+        #endregion
 
         private void Awake()
         {
@@ -40,6 +98,10 @@ namespace VoxelEngine
             m_Camera = GetComponent<Camera>();
             m_ScreenWidth = Screen.width;
             m_ScreenHeight = Screen.height;
+            m_ThreadGroupsX = Mathf.CeilToInt(Screen.width / m_ThreadNumber);
+            m_ThreadGroupsY = Mathf.CeilToInt(Screen.height / m_ThreadNumber);
+
+            // Same seed for testing.
             Random.InitState(0);
         }
 
@@ -47,18 +109,91 @@ namespace VoxelEngine
         {
             Assert.IsNotNull(DirectionalLight, "There is no directional light in the scene.");
             Assert.IsNotNull(VoxelRendererShader, "Renderer shader was not assigned.");
+
+            m_Voxelizers = FindObjectsOfType<MonoBehaviour>().OfType<IVoxelizer>().ToList();
+
+            BindVoxelizers();
         }
 
+        void BindVoxelizers()
+        {
+            if (m_Voxelizers != null)
+            {
+                for(int voxelizerId = m_Voxelizers.Count - 1; voxelizerId >=0; --voxelizerId)                
+                {
+                    m_Voxelizers[voxelizerId]?.Bind(this);
+                }
+            }
+        }
+
+        void UnbindVoxelizers()
+        {
+            if (m_Voxelizers != null)
+            {
+                for (int voxelizerId = m_Voxelizers.Count - 1; voxelizerId >= 0; --voxelizerId)
+                {
+                    m_Voxelizers[voxelizerId]?.Unbind(this);
+                }
+            }
+        }
+
+        private void OnDestroy() => UnbindVoxelizers();
+
+        private void OnEnable() => BindVoxelizers();
+
+        // This is bad because I'm reconstructing all the buffers every time a voxelizer is bind/unbind.
+        // It has to be improved in the future.
         private void UpdateVoxelsBuffer()
         {
             m_Voxels.Clear();
+            m_VoxelVolumeProperties.Clear();
+            m_Textures.Clear();
+
             foreach(IVoxelizer voxelizer in m_Voxelizers)
-            {
+            {   
+                VoxelsVolumeProperties voxelVolumeProperties = new VoxelsVolumeProperties
+                {
+                    MaterialColor = new Vector3(voxelizer.Material.Color.r, voxelizer.Material.Color.g, voxelizer.Material.Color.b),
+                    VolumeBoundMin = voxelizer.VoxelsVolumeMin,
+                    VolumeBoundMax = voxelizer.VoxelsVolumeMax,
+                };
+
+                if (voxelizer.Material.Texture != null)
+                {
+                    m_Textures.Add(voxelizer.Material.Texture);
+                    voxelVolumeProperties.MaterialTextureID = m_Textures.Count - 1;
+                }
+                else
+                {
+                    voxelVolumeProperties.MaterialTextureID = -1;
+                }
+
+                m_VoxelVolumeProperties.Add(voxelVolumeProperties);
+
+                int voxelVolumePropertiesId = m_VoxelVolumeProperties.Count - 1;
+
+                for (int voxelId = 0; voxelId < voxelizer.Voxels.Count; ++voxelId)
+                {
+                    var voxel = voxelizer.Voxels[voxelId];
+                    voxel.VoxelsVolumePropertiesID = voxelVolumePropertiesId;
+                    voxelizer.Voxels[voxelId] = voxel;
+                }
+
                 m_Voxels.AddRange(voxelizer.Voxels);
             }
 
-            CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, 28);
+            m_TextureBuffer = CreateTextureArray(m_Textures.ToArray());
+
+            CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, 40);
             SetComputeBuffer(m_KiMain, "_Voxels", m_VoxelsBuffer);
+
+            CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, 40);
+            SetComputeBuffer(m_KiMain, "_VoxelsVolumeProperties", m_VoxelsVolumePropertiesBuffer);
+
+            if (m_TextureBuffer != null)
+            {
+                VoxelRendererShader.SetTexture(m_KiMain, "_TextureBuffer", m_TextureBuffer);
+            }
         }
 
         private void Update()
@@ -67,41 +202,81 @@ namespace VoxelEngine
             {
                 m_ScreenWidth = Screen.width;
                 m_ScreenHeight = Screen.height;
+                m_ThreadGroupsX = Mathf.CeilToInt(Screen.width / m_ThreadNumber);
+                m_ThreadGroupsY = Mathf.CeilToInt(Screen.height / m_ThreadNumber);
             }
         }
 
         private void OnDisable()
         {
             m_VoxelsBuffer?.Release();
+            m_VoxelsVolumePropertiesBuffer?.Release();
+            
+            if (m_TextureBuffer != null)
+            {
+                Destroy(m_TextureBuffer);
+            }
+
+            UnbindVoxelizers();
+        }
+
+        private void OnValidate()
+        {
+            if (DirectionalLight == null)
+            {
+                var lights = FindObjectsOfType<Light>();
+                foreach (var light in lights)
+                {
+                    if (light.type == LightType.Directional)
+                    {
+                        DirectionalLight = light;
+                        break;
+                    }
+                }
+            }
         }
 
         public void Render(CommandBuffer cmd)
         { 
             InitRenderTexture();
-            SetShaderParameters();
 
-            if(m_VoxelsBufferNeedUpdate)
+            bool somethingHasChanged = false;
+
+            if (m_Camera.transform.hasChanged)
+            {
+                VoxelRendererShader.SetMatrix(m_CameraToWorldPropertyID, m_Camera.cameraToWorldMatrix);
+                VoxelRendererShader.SetMatrix(m_CameraInverseProjectioPropertyID, m_Camera.projectionMatrix.inverse);
+
+                m_Camera.transform.hasChanged = false;
+                somethingHasChanged = true;
+            }
+
+            if (DirectionalLight.transform.hasChanged)
+            {
+                Vector3 lightForward = -DirectionalLight.transform.forward;
+                VoxelRendererShader.SetVector(m_DirectionalLightPropertyID, new Vector4(lightForward.x, lightForward.y, lightForward.z, DirectionalLight.intensity));
+
+                DirectionalLight.transform.hasChanged = false;
+                somethingHasChanged = true;
+            }
+
+            if (m_VoxelsBufferNeedUpdate)
             {
                 UpdateVoxelsBuffer();
-                m_VoxelsBufferNeedUpdate = false;
-            }    
+                VoxelRendererShader.SetInt(m_VoxelsCountPropertyID, m_Voxels.Count);
 
-            VoxelRendererShader.SetTexture(m_KiMain, "Result", m_Target);
-            int threadGroupsX = Mathf.CeilToInt(Screen.width / 8.0f);
-            int threadGroupsY = Mathf.CeilToInt(Screen.height / 8.0f);
-            VoxelRendererShader.Dispatch(m_KiMain, threadGroupsX, threadGroupsY, 1);
+                m_VoxelsBufferNeedUpdate = false;
+                somethingHasChanged = true;
+            }
+
+            if (somethingHasChanged)
+            {
+                VoxelRendererShader.SetTexture(m_KiMain, "Result", m_Target);
+                VoxelRendererShader.Dispatch(m_KiMain, m_ThreadGroupsX, m_ThreadGroupsY, 1);
+            }
 
             // Blit the result texture to the screen.       
             cmd.Blit(m_Target, BuiltinRenderTextureType.CurrentActive);
-        }
-
-        private void SetShaderParameters()
-        {
-            VoxelRendererShader.SetMatrix("_CameraToWorld", m_Camera.cameraToWorldMatrix);
-            VoxelRendererShader.SetMatrix("_CameraInverseProjection", m_Camera.projectionMatrix.inverse);
-
-            Vector3 lightForward = -DirectionalLight.transform.forward;        
-            VoxelRendererShader.SetVector("_DirectionalLightDirection", new Vector4(lightForward.x, lightForward.y, lightForward.z, DirectionalLight.intensity));
         }
 
         private void InitRenderTexture()
@@ -122,35 +297,50 @@ namespace VoxelEngine
             }
         }
 
-        public static void RegisterVoxelizer(IVoxelizer voxelizer)
+        public void Register(IVoxelizer voxelizer)
         {
             m_Voxelizers.Add(voxelizer);
             m_VoxelsBufferNeedUpdate = true;
         }
 
-        public static void UnregisterVoxelizer(IVoxelizer voxelizer)
+        public void Deregister(IVoxelizer voxelizer)
         {
             m_Voxelizers.Remove(voxelizer);
             m_VoxelsBufferNeedUpdate = true;
         }
 
-        private void OnValidate()
+        #region Helpers
+        // Reference: https://catlikecoding.com/unity/tutorials/hex-map/part-14/
+        private Texture2DArray CreateTextureArray(Texture2D[] textures)
         {
-            if (DirectionalLight == null)
+            if (textures == null || textures.Length == 0)
             {
-                var lights = FindObjectsOfType<Light>();
-                foreach (var light in lights)
+                return null;
+            }
+
+            Texture2D firstTex = textures[0];
+            Texture2DArray texArray = new Texture2DArray(firstTex.width,
+                                                        firstTex.height,
+                                                        textures.Length,
+                                                        firstTex.format,
+                                                        firstTex.mipmapCount > 0);
+            texArray.anisoLevel = firstTex.anisoLevel;
+            texArray.filterMode = firstTex.filterMode;
+            texArray.wrapMode = firstTex.wrapMode;
+
+            for (int i = 0; i < textures.Length; i++)
+            {
+                for (int m = 0; m < firstTex.mipmapCount; m++)
                 {
-                    if (light.type == LightType.Directional)
-                    {
-                        DirectionalLight = light;
-                        break;
-                    }
+                    Graphics.CopyTexture(textures[i], 0, m, texArray, i, m);
                 }
             }
+
+            texArray.Apply();
+
+            return texArray;
         }
 
-        #region Compute Buffer Helpers
         private static void CreateComputeBuffer<T>(ref ComputeBuffer buffer, List<T> data, int stride)
     where T : struct
         {
