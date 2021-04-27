@@ -57,7 +57,7 @@ namespace VoxelEngine
         #region Properties
         public ComputeShader VoxelRendererShader;
         public Light DirectionalLight;
-        public static float kVoxelSize = 0.1f;
+        public static float kVoxelSize = 0.2f;
         public static Vector3 kVoxelDimensions = new Vector3(kVoxelSize, kVoxelSize, kVoxelSize);
         public static Vector3 kVoxelHalfDimensions = kVoxelDimensions / 2f;
         public static Vector3[] kVoxelVertices =
