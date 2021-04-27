@@ -56,7 +56,7 @@ The algorithm consists of basically:
 
 When a voxel is created, it stores the color and uv (if any) from the first triangle that was found intersecting it.
 If the `Material` of the `MeshRenderer` used by the voxelizer has a texture, the voxel uv will be used to sample that texture during the rendering.
-If a voxel has no color or texture, a fallback color is used to paint it.
+If a voxel has no color or texture, a fallback color is used to paint it. A version of this voxelizer using `Tasks` is available.
 
 #### MeshRendererOctreeVoxelizer
 
@@ -95,7 +95,7 @@ The voxels are rendered using a `ComputeShader` called `VoxelRendererShader`. Th
 - For each pixel in the render target, a ray is traced from the camera passing through it.
   - If the ray hits a bounding box of a voxels volume, get the minimum distance (if any) among all the voxels in the volume and shade using the voxel and volume properties.
 
- This naive implementation raymarching is quite heavy for the purpose of this project, but I will talk more about it in the <a href=#challenges-and-future-work->Challenges</a> section.
+ This naive implementation raymarching is quite heavy for the purpose of this project, but I will talk more about it in the <a href=#challenges-and-future-work->"Challenges and Future Work"</a> section.
 
 ## Android Build <a href="#summary">↑</a>
 
@@ -107,9 +107,36 @@ It is a very simple scene using both voxelizers (naive and octree-based).
 - **[BUG]** You can control the light direction in the scene, but the orientation in the renderer is different.
 - **[BUG]** Soft shadows have some glitches.
 - **[BUG]** AABB-Triangle intersection check fails if triangles are aligned with boxes faces. 
-- Performance in general is bad, specially in the renderer. This will be discussed in the next section <a href="challenges-and-future-work-">Challenges and Future Work</a>
+- Performance in general is bad, specially in the renderer. This will be discussed in the next section <a href="#challenges-and-future-work-">"Challenges and Future Work"</a>
 
 ## Challenges and Future Work <a href="#summary">↑</a>
+
+### Rendering
+When I started to think about the project, I decided to implement a raymarching algorithm for rendering for two reasons: First, because I like playing with raymarching and, second, because I had done it before.
+However, this choice was a bad take. A naive raymarching algorithm is pretty bad for rendering thousands of entities (in our case voxels) without any spatial partitioning technique to support fast querying of voxels. I thought about ways of improving the renderer, but it was too late to implement them. Some of those ideas were:
+- Like I said, implementing a spatial partitioning technique for fast querying of voxels in the compute shader (e.g kD-Tree?, Bounding Volume Hierarchy?).
+- Implementing a tile-based approach, such as those seen in a tile-based GPUs. I would add another kernel to the compute shader that would divide the render target into tiles, and then add each voxel to its corresponding tile. In the main kernel, only voxels belonging to a given tile would be evaluated at time.
+
+In the end, If I still had time I would actually implement another renderer based on the default URP renderer and use `DrawMeshInstancedIndirect` to draw all the voxels with GPU instancing.
+
+### Voxelization
+
+About the voxelization. The algorithms were not hard to implement; however, those basic implementations are really slow. For the naive approach, I manage to improve it a bit by using async `Tasks`, which was challenging, but in the end worked well. 
+The naive algorithm is `O(x\*y\*z\*t)` where `*x*`, `*y*`, `*z*` are the mesh bounds dimensions in voxels and `*t*` is the number of triangles in the mesh. That's clearly bad. I thought later that I could have done a search by triangle instead and check only voxels in the triangle bounds.
+
+I did not have time to think about a `Octree` async version, but I did notice that I missed an optimization in my current implementation that is: I am passing all the triangles to the children nodes instead of only the ones that matter for that region. 
+
+The whole processing on the CPU side could be improved if I had used **ECS** and **Jobs System**, but I did not take that path because I do not have experience with them and there was not enough time to research for this project. 
+
+### Future Work
+
+As a summary of features that I would like to do in the future, I could say:
+- Add spatial partitioning technique in compute shader.
+- Add tile-based approach for voxel querying.
+- Implement another renderer using `DrawMeshInstancedIndirect`.
+- Create a custom SRP, stripping out URP features that are not useful for the voxel renderer.
+- Implement voxelizers using ECS and Jobs System.
+- (Actually research how people actually implement voxel renderers :D) 
 
 ## Contributor <a href="#summary">↑</a>
 
@@ -127,6 +154,6 @@ This project uses the following asset:
   
 ## References <a href="#summary">↑</a>
 
-- [AABB-Triangle intersections paper](https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf).
+- [AABB-Triangle intersections paper](https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf)
 - [Inigo Quilez's website](https://iquilezles.org/) 
 - [Shadertoy raymarching example](https://www.shadertoy.com/view/Xds3zN)
