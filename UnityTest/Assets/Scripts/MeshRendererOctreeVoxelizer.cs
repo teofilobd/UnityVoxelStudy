@@ -43,8 +43,12 @@ namespace VoxelEngine
 
                 m_Octree = new Octree(meshBoundsWS.min, maxPointInVoxelsVolume, meshParams);
 
-                Queue<Octree.OctreeNode> nodes = new Queue<Octree.OctreeNode>();             
-                nodes.Enqueue(m_Octree.Root);
+                Queue<Octree.OctreeNode> nodes = new Queue<Octree.OctreeNode>();
+
+                if (m_Octree.Root != null)
+                {
+                    nodes.Enqueue(m_Octree.Root);
+                }
 
                 while (nodes.Count > 0)
                 {
@@ -69,7 +73,10 @@ namespace VoxelEngine
                         {
                             foreach (Octree.OctreeNode octreeNode in currentNode.ChildrenNodes)
                             {
-                                nodes.Enqueue(octreeNode);
+                                if (octreeNode != null)
+                                {
+                                    nodes.Enqueue(octreeNode);
+                                }
                             }
                         }
                     }

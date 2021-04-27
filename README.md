@@ -69,9 +69,8 @@ The color of a voxel is determined in the same way as in the `MeshRendererNaiveV
 
 A basic `Octree` data structure implementation. The algorithm consists of:
 - Get dimensions of the mesh bounding box and adjust them to the global voxel dimensions.
-- Check if any triangle intersects the current bounding box, if so subdivide into 8 regions.
-- For each new region, check if any triangle intersects that region, if so subdivide into 8 regions.
-- Keeps subdiving until a minimum region dimensions (in this case the global voxel dimensions) is reached. 
+- For each triangle in the mesh, try to insert it in the `Octree`.
+- Keeps subdividing the current region in 8 smaller subregions until the triangle reaches a region with the minimum dimension allowed (in this case the global voxel dimensions). 
 
 In the end, every leaf of the `Octree` that is occupied (has intersection with a triangle) is a voxel.
 
@@ -122,9 +121,9 @@ In the end, If I still had time I would actually implement another renderer base
 ### Voxelization
 
 About the voxelization. The algorithms were not hard to implement; however, those basic implementations are really slow. For the naive approach, I manage to improve it a bit by using async `Tasks`, which was challenging, but in the end worked well. 
-The naive algorithm is `O(x\*y\*z\*t)` where `*x*`, `*y*`, `*z*` are the mesh bounds dimensions in voxels and `*t*` is the number of triangles in the mesh. That's clearly bad. I thought later that I could have done a search by triangle instead and check only voxels in the triangle bounds.
+The naive algorithm is `O(x*y*z*t)` where `x`, `y`, `z` are the mesh bounds dimensions in voxels and `t` is the number of triangles in the mesh. That's clearly bad. I thought later that I could have done a search by triangle instead and check only voxels in the triangle bounds.
 
-I did not have time to think about a `Octree` async version, but I did notice that I missed an optimization in my current implementation that is: I am passing all the triangles to the children nodes instead of only the ones that matter for that region. 
+When I was writing this document, I realized I had implemented the `Octree` in a wrong and very inneficient way. I was checking every triangle at every region instead of inserting triangles at root and having the real benefit of the `Octree`. I managed to fix in time though. The algorithm time complexity is `O(t*log(n))` where `t` is the number of triangles and `n` is the number of nodes. I did not have time to think about a `Octree` async version.
 
 The whole processing on the CPU side could be improved if I had used **ECS** and **Jobs System**, but I did not take that path because I do not have experience with them and there was not enough time to research for this project. 
 

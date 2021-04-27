@@ -9,19 +9,15 @@ namespace VoxelEngine
     public class Octree
     {
         /// <summary>
-        /// Class representing a octree node
+        /// Class representing a octree node.
         /// </summary>
         public class OctreeNode
         {
-            public OctreeNode ParentNode;
             public OctreeNode[] ChildrenNodes;
-
             // 8 vertices composing the voxel.
-            public Vector3[] Vertices;
-            
+            public Vector3[] Vertices;            
             // A node is occupied if it has triangles in it.
             public bool Occupied;
-
             public bool IsLeaf { get; }                   
             public Vector3 MinPoint { get; }
             public Vector3 MaxPoint { get; }
@@ -31,15 +27,14 @@ namespace VoxelEngine
             public Vector2 UV;
             public Color Color;
 
-            public OctreeNode(OctreeNode parent, Vector3 minPoint, Vector3 maxPoint)
+            public OctreeNode(Vector3 minPoint, Vector3 maxPoint, Vector3[] vertices)
             {
-                ParentNode = parent;
                 MinPoint = minPoint;
                 MaxPoint = maxPoint;
                 CenterPoint = (maxPoint - minPoint) * 0.5f + minPoint;
                 Dimensions = maxPoint - minPoint;
                 HalfDimensions = Dimensions * 0.5f;
-                ChildrenNodes = null;
+                ChildrenNodes = new OctreeNode[8];
                 UV = Vector2.zero;
                 Color = Color.white;
 
@@ -49,29 +44,7 @@ namespace VoxelEngine
                     IsLeaf = true;
                 }
 
-                Vertices = new Vector3[8];
-
-                Vertices[0] = minPoint;
-                Vertices[1] = minPoint + new Vector3(Dimensions.x, 0 , 0);
-                Vertices[2] = minPoint + new Vector3(0, Dimensions.y, 0);
-                Vertices[3] = minPoint + new Vector3(Dimensions.x, Dimensions.y, 0);
-                Vertices[4] = minPoint + new Vector3(0, 0, Dimensions.z);
-                Vertices[5] = minPoint + new Vector3(Dimensions.x, 0, Dimensions.z);
-                Vertices[6] = minPoint + new Vector3(0, Dimensions.y, Dimensions.z);
-                Vertices[7] = minPoint + new Vector3(Dimensions.x, Dimensions.y, Dimensions.z);
-            }
-
-            public void CreateChildren()
-            {
-                ChildrenNodes = new OctreeNode[8];
-                ChildrenNodes[0] = new OctreeNode(this, MinPoint, MinPoint + HalfDimensions);
-                ChildrenNodes[1] = new OctreeNode(this, MinPoint + new Vector3(HalfDimensions.x, 0, 0), MinPoint + new Vector3(HalfDimensions.x, 0, 0) + HalfDimensions);
-                ChildrenNodes[2] = new OctreeNode(this, MinPoint + new Vector3(0, HalfDimensions.y, 0), MinPoint + new Vector3(0, HalfDimensions.y, 0) + HalfDimensions);
-                ChildrenNodes[3] = new OctreeNode(this, MinPoint + new Vector3(HalfDimensions.x, HalfDimensions.y, 0), MinPoint + new Vector3(HalfDimensions.x, HalfDimensions.y, 0) + HalfDimensions);
-                ChildrenNodes[4] = new OctreeNode(this, MinPoint + new Vector3(0, 0, HalfDimensions.z), MinPoint + new Vector3(0, 0, HalfDimensions.z ) + HalfDimensions);
-                ChildrenNodes[5] = new OctreeNode(this, MinPoint + new Vector3(HalfDimensions.x, 0, HalfDimensions.z), MinPoint + new Vector3(HalfDimensions.x, 0, HalfDimensions.z) + HalfDimensions);
-                ChildrenNodes[6] = new OctreeNode(this, MinPoint + new Vector3(0, HalfDimensions.y, HalfDimensions.z), MinPoint + new Vector3(0, HalfDimensions.y, HalfDimensions.z) + HalfDimensions);
-                ChildrenNodes[7] = new OctreeNode(this, MinPoint + new Vector3(HalfDimensions.x, HalfDimensions.y, HalfDimensions.z), MinPoint + new Vector3(HalfDimensions.x, HalfDimensions.y, HalfDimensions.z) + HalfDimensions);
+                Vertices = vertices;
             }
         }
 
@@ -87,22 +60,42 @@ namespace VoxelEngine
 
         public OctreeNode Root;
 
-        public Octree(Vector3 minPoint, Vector3 maxPoint, MeshParams meshParams)
+        private readonly Vector3[] m_MinPointRegion = new Vector3[]
         {
-            Root = new OctreeNode(null, minPoint, maxPoint);
+            Vector3.zero,
+            Vector3.right,
+            Vector3.up,
+            Vector3.right + Vector3.up,
+            Vector3.forward,
+            Vector3.right + Vector3.forward,
+            Vector3.up + Vector3.forward,
+            Vector3.one
+        };
 
-            ProcessNode(Root, meshParams);
+        private Vector3[] GetNodeVertices(Vector3 minPoint, Vector3 maxPoint)
+        {
+            Vector3 dimensions = maxPoint - minPoint;
+            return new Vector3[]
+                {
+                    minPoint,
+                    minPoint + new Vector3(dimensions.x, 0, 0),
+                    minPoint + new Vector3(0, dimensions.y, 0),
+                    minPoint + new Vector3(dimensions.x, dimensions.y, 0),
+                    minPoint + new Vector3(0, 0, dimensions.z),
+                    minPoint + new Vector3(dimensions.x, 0, dimensions.z),
+                    minPoint + new Vector3(0, dimensions.y, dimensions.z),
+                    minPoint + new Vector3(dimensions.x, dimensions.y, dimensions.z)
+                };
         }
 
-        public void ProcessNode(OctreeNode node, MeshParams meshParams)
+        public Octree(Vector3 minPoint, Vector3 maxPoint, MeshParams meshParams)
         {
-            bool subdivide = false;
-
-            for (int triangleId = 0; triangleId < meshParams.Triangles.Length; triangleId += 3)
+            Root = null;
+            for (int triangleID = 0; triangleID < meshParams.Triangles.Length; triangleID+=3)
             {
-                int vertexId1 = meshParams.Triangles[triangleId];
-                int vertexId2 = meshParams.Triangles[triangleId + 1];
-                int vertexId3 = meshParams.Triangles[triangleId + 2];
+                int vertexId1 = meshParams.Triangles[triangleID];
+                int vertexId2 = meshParams.Triangles[triangleID + 1];
+                int vertexId3 = meshParams.Triangles[triangleID + 2];
 
                 Vector3[] triangleVertices = new Vector3[3]
                 {
@@ -111,40 +104,71 @@ namespace VoxelEngine
                     meshParams.VerticesWS[vertexId3]
                 };
 
-                Vector3 triangleNormal = meshParams.TrianglesNormals[triangleId / 3];
+                Vector3 triangleNormal = meshParams.TrianglesNormals[triangleID / 3];
+                Vector2 uv = Vector2.zero;
+                Color color = Color.white;
 
-                // Check if a triangle is inside the voxel.
-                if (MathHelper.CheckAABBAndTriangleIntersection(node.MinPoint, node.MaxPoint, triangleVertices,
-                    node.Vertices, triangleNormal))
+                // Get mesh properties (color, uv) from first vertex in triangle and set to voxel.            
+                if (meshParams.UVs.Length > 0)
                 {
-                    if (!node.IsLeaf)
-                    {
-                        subdivide = true;
-                    }
-
-                    node.Occupied = true;
-
-                    // Get mesh properties (color, uv) from first vertex in triangle and set to voxel.
-                    if(meshParams.UVs.Length > 0)
-                    {
-                        node.UV = meshParams.UVs[vertexId1];
-                    }
-                    if (meshParams.Colors.Length > 0)
-                    {
-                        node.Color = meshParams.Colors[vertexId1];
-                    }
-                    break;
-                }                
-            }
-
-            if (subdivide)
-            {
-                node.CreateChildren();
-                foreach(OctreeNode octreeNode in node.ChildrenNodes)
+                    uv = meshParams.UVs[vertexId1];
+                }
+                if (meshParams.Colors.Length > 0)
                 {
-                    ProcessNode(octreeNode, meshParams);
+                    color = meshParams.Colors[vertexId1];
+                }
+
+                Vector3[] nodeVertices = Root != null ? Root.Vertices : GetNodeVertices(minPoint, maxPoint);
+
+                if (MathHelper.CheckAABBAndTriangleIntersection(minPoint, maxPoint, triangleVertices,
+                    nodeVertices, triangleNormal))
+                {
+                    ProcessRegion(ref Root, nodeVertices, minPoint, maxPoint, triangleVertices, triangleNormal, uv, color);
                 }
             }
+        }
+
+        public OctreeNode ProcessRegion(ref OctreeNode currentNode, Vector3[] nodeVertices, Vector3 minPoint, Vector3 maxPoint, 
+            Vector3[] triangleVertices, Vector3 triangleNormal, Vector2 uv, Color color)
+        {
+            currentNode ??= new OctreeNode(minPoint, maxPoint, nodeVertices)
+            {
+                Occupied = true,
+                UV = uv,
+                Color = color
+            };
+         
+            if (!currentNode.IsLeaf)
+            {
+                for (int regionId = 0; regionId < 8; ++regionId)
+                {
+                    OctreeNode regionNode = currentNode.ChildrenNodes[regionId];
+
+                    Vector3 regionMinPoint;
+                    Vector3 regionMaxPoint;
+                    Vector3[] regionVertices;
+
+                    if (regionNode == null)
+                    {
+                        regionMinPoint = currentNode.MinPoint + Vector3.Scale(m_MinPointRegion[regionId], currentNode.HalfDimensions);
+                        regionMaxPoint = regionMinPoint + currentNode.HalfDimensions;
+                        regionVertices = GetNodeVertices(regionMinPoint, regionMaxPoint);
+                    } else
+                    {
+                        regionMinPoint = regionNode.MinPoint;
+                        regionMaxPoint = regionNode.MaxPoint;
+                        regionVertices = regionNode.Vertices;
+                    }
+
+                    if (MathHelper.CheckAABBAndTriangleIntersection(regionMinPoint, regionMaxPoint, triangleVertices,
+                            regionVertices, triangleNormal))
+                    {
+                        ProcessRegion(ref currentNode.ChildrenNodes[regionId], regionVertices, regionMinPoint, regionMaxPoint, 
+                            triangleVertices, triangleNormal, uv, color);
+                    }
+                }
+            }            
+            return currentNode;
         }
     }
 }
