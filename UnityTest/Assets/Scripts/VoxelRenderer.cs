@@ -55,7 +55,7 @@ namespace VoxelEngine
         #region Properties
         public ComputeShader VoxelRendererShader;
         public Light DirectionalLight;
-        public static float kVoxelSize = 0.2f;
+        public static float kVoxelSize = 0.1f;
         public static Vector3 kVoxelDimensions = new Vector3(kVoxelSize, kVoxelSize, kVoxelSize);
         public static Vector3 kVoxelHalfDimensions = kVoxelDimensions / 2f;
         public static Vector3[] kVoxelVertices =
@@ -78,7 +78,7 @@ namespace VoxelEngine
         private ComputeBuffer m_VoxelsBuffer;
         private ComputeBuffer m_VoxelsVolumePropertiesBuffer;
         private Texture2DArray m_TextureBuffer;
-        private List<IVoxelizer> m_Voxelizers = new List<IVoxelizer>();
+        private HashSet<IVoxelizer> m_Voxelizers = new HashSet<IVoxelizer>();
         private List<Texture2D> m_Textures = new List<Texture2D>();
         private List<VoxelsVolumeProperties> m_VoxelVolumeProperties = new List<VoxelsVolumeProperties>();
         private bool m_VoxelsBufferNeedUpdate = false;
@@ -110,29 +110,31 @@ namespace VoxelEngine
             Assert.IsNotNull(DirectionalLight, "There is no directional light in the scene.");
             Assert.IsNotNull(VoxelRendererShader, "Renderer shader was not assigned.");
 
-            m_Voxelizers = FindObjectsOfType<MonoBehaviour>().OfType<IVoxelizer>().ToList();
-
             BindVoxelizers();
         }
 
         void BindVoxelizers()
         {
-            if (m_Voxelizers != null)
+            var voxelizers = FindObjectsOfType<MonoBehaviour>().OfType<IVoxelizer>().ToList();
+
+            if (voxelizers != null)
             {
-                for(int voxelizerId = m_Voxelizers.Count - 1; voxelizerId >=0; --voxelizerId)                
+                for(int voxelizerId = voxelizers.Count - 1; voxelizerId >=0; --voxelizerId)                
                 {
-                    m_Voxelizers[voxelizerId]?.Bind(this);
+                    voxelizers[voxelizerId]?.Bind(this);
                 }
             }
         }
 
         void UnbindVoxelizers()
         {
-            if (m_Voxelizers != null)
+            var voxelizers = FindObjectsOfType<MonoBehaviour>().OfType<IVoxelizer>().ToList();
+
+            if (voxelizers != null)
             {
-                for (int voxelizerId = m_Voxelizers.Count - 1; voxelizerId >= 0; --voxelizerId)
+                for (int voxelizerId = voxelizers.Count - 1; voxelizerId >= 0; --voxelizerId)
                 {
-                    m_Voxelizers[voxelizerId]?.Unbind(this);
+                    voxelizers[voxelizerId]?.Unbind(this);
                 }
             }
         }
@@ -182,18 +184,24 @@ namespace VoxelEngine
                 m_Voxels.AddRange(voxelizer.Voxels);
             }
 
-            m_TextureBuffer = CreateTextureArray(m_Textures.ToArray());
+            Debug.Log($"Number of voxels: {m_Voxels.Count}");
 
-            CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, 40);
+            if (m_Textures.Count > 0)
+            {
+                m_TextureBuffer = CreateTextureArray(m_Textures.ToArray());
+            } else
+            {
+                m_TextureBuffer = CreateTextureArray(new Texture2D[] { Texture2D.whiteTexture });
+            }
+            VoxelRendererShader.SetTexture(m_KiMain, "_TextureBuffer", m_TextureBuffer);
+
+            int stride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Voxel));
+            CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, stride);
             SetComputeBuffer(m_KiMain, "_Voxels", m_VoxelsBuffer);
 
-            CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, 40);
-            SetComputeBuffer(m_KiMain, "_VoxelsVolumeProperties", m_VoxelsVolumePropertiesBuffer);
-
-            if (m_TextureBuffer != null)
-            {
-                VoxelRendererShader.SetTexture(m_KiMain, "_TextureBuffer", m_TextureBuffer);
-            }
+            stride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(VoxelsVolumeProperties));
+            CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, stride);
+            SetComputeBuffer(m_KiMain, "_VoxelsVolumeProperties", m_VoxelsVolumePropertiesBuffer);             
         }
 
         private void Update()
