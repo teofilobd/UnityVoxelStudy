@@ -46,9 +46,11 @@ namespace VoxelEngine
         public struct VoxelsVolumeProperties
         {
             public int MaterialTextureID;
+            public int VoxelStartID;
+            public int VoxelsCount;
             public Vector3 MaterialColor;
-            public Vector3 VolumeBoundMin;
-            public Vector3 VolumeBoundMax;
+            public Vector3 VolumeCenter;
+            public Vector3 VolumeHalfDimensions;
         }
         #endregion
 
@@ -152,12 +154,14 @@ namespace VoxelEngine
             m_Textures.Clear();
 
             foreach(IVoxelizer voxelizer in m_Voxelizers)
-            {   
+            {
                 VoxelsVolumeProperties voxelVolumeProperties = new VoxelsVolumeProperties
                 {
                     MaterialColor = new Vector3(voxelizer.Material.Color.r, voxelizer.Material.Color.g, voxelizer.Material.Color.b),
-                    VolumeBoundMin = voxelizer.VoxelsVolumeMin,
-                    VolumeBoundMax = voxelizer.VoxelsVolumeMax,
+                    VolumeCenter = (voxelizer.VoxelsVolumeMax - voxelizer.VoxelsVolumeMin) * 0.5f + voxelizer.VoxelsVolumeMin,
+                    VolumeHalfDimensions = (voxelizer.VoxelsVolumeMax - voxelizer.VoxelsVolumeMin) * 0.5f,
+                    VoxelStartID = m_Voxels.Count,
+                    VoxelsCount = voxelizer.Voxels.Count
                 };
 
                 if (voxelizer.Material.Texture != null)

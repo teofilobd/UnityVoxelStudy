@@ -31,9 +31,11 @@ struct Voxel
 struct VoxelsVolumeProperties
 {
     int textureID;
+    int voxelStartID;
+    int voxelsCount;
     float3 color;
-    float3 volumeBoundMin;
-    float3 volumeBoundMax;
+    float3 volumeCenter;
+    float3 volumeHalfDimensions;
 };
 
 struct TracingResult
@@ -71,12 +73,18 @@ float sdot(in float3 v1, in float3 v2)
     return saturate(dot(v1, v2)); 
 }
 
+float sdBox(in float3 p, in float3 b)
+{
+    float3 d = abs(p) - b;
+    return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
+}
+
 // Uniform box SDF
 float sdVoxel(in float3 p, in float size)
 {
-    float3 d = abs(p) - size.xxx;
-    return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
+    return sdBox(p, size);
 }
+
 
 // Union SDF operation
 TracingResult opU(in TracingResult result1, in TracingResult result2)
@@ -101,16 +109,29 @@ TracingResult scene(in float3 pos)
     result.voxelsVolumePropertiesID = -1;
     result.uv = float2(0, 0);
  
-    for (int i = 0; i < _VoxelsCount; i++)
+    uint count = 0, stride = 0;
+    _VoxelsVolumeProperties.GetDimensions(count, stride);
+
+    for (uint volumeID = 0; volumeID < count; ++volumeID)
     {
-        Voxel voxel = _Voxels[i];
-        TracingResult tracingResult;
-        tracingResult.distance = sdVoxel(pos - voxel.origin, voxel.size * 0.5);
-        tracingResult.m = 3;
-        tracingResult.color = voxel.color;
-        tracingResult.voxelsVolumePropertiesID = voxel.voxelsVolumePropertiesID;
-        tracingResult.uv = voxel.uv;
-        result = opU(result, tracingResult);
+        VoxelsVolumeProperties volumeProperties = _VoxelsVolumeProperties[volumeID];
+
+        // check first if voxels volume bounding box is hit before processing voxels.
+        if (sdBox(pos - volumeProperties.volumeCenter, volumeProperties.volumeHalfDimensions) < result.distance)
+        {
+            int maxVoxelID = volumeProperties.voxelStartID + volumeProperties.voxelsCount;
+            for (int voxelID = volumeProperties.voxelStartID; voxelID < maxVoxelID; ++voxelID)
+            {
+                Voxel voxel = _Voxels[voxelID];
+                TracingResult tracingResult;
+                tracingResult.distance = sdVoxel(pos - voxel.origin, voxel.size * 0.5);
+                tracingResult.m = 3;
+                tracingResult.color = voxel.color;
+                tracingResult.voxelsVolumePropertiesID = voxel.voxelsVolumePropertiesID;
+                tracingResult.uv = voxel.uv;
+                result = opU(result, tracingResult);
+            }
+        }
     }
 
     return result;
@@ -143,7 +164,7 @@ TracingResult raycast(in Ray ray)
 
     // raymarch primitives       
     float t = tmin;
-    for (int i = 0; i < 70 && t < tmax; i++)
+    for (int i = 0; i < 35 && t < tmax; i++)
     {
         TracingResult h = scene(ray.origin + ray.direction * t);
         if (abs(h.distance) < (0.0001 * t))
@@ -229,7 +250,7 @@ float3 render(in Ray ray)
         
         // Lighting        
         float3  lightDirection = _DirectionalLightDirection.xyz;
-        col *= sdot(normalDirection, lightDirection) * calcSoftshadow(pos, lightDirection, 0.02, 2.5);
+        col *= sdot(normalDirection, lightDirection);// *calcSoftshadow(pos, lightDirection, 0.02, 2.5);
         
         // Fog
         col = lerp(col, float3(0.7, 0.7, 0.9), 1.0 - exp(-0.0001 * t * t * t));
