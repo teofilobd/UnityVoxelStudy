@@ -115,16 +115,16 @@ However, this choice was a bad take. A naive raymarching algorithm is pretty bad
 - Like I said, implementing a spatial partitioning technique for fast querying of voxels in the compute shader (e.g kD-Tree?, Bounding Volume Hierarchy?).
 - Implementing a tile-based approach, such as those seen in tile-based GPUs. I would add another kernel to the compute shader that would divide the render target into tiles, and then add each voxel to its corresponding tile. In the main kernel, only voxels belonging to a given tile would be evaluated at time.
 
-In the end, If I still had time I would actually implement another renderer based on the default URP renderer and use `DrawMeshInstancedIndirect` to draw all the voxels with GPU instancing.
+In the future, I would like to actually implement another renderer based on the default URP renderer and use `DrawMeshInstancedIndirect` to draw all the voxels with GPU instancing.
 
 ### Voxelization
 
 About the voxelization. The algorithms were not hard to implement; however, those basic implementations are really slow. For the naive approach, I manage to improve it a bit by using async `Tasks`, which was challenging, but in the end worked well. 
 The naive algorithm is `O(x*y*z*t)` where `x`, `y`, `z` are the mesh bounds dimensions in voxels and `t` is the number of triangles in the mesh. That's clearly bad. I thought later that I could have done a search by triangle instead and check only voxels in the triangle bounds.
 
-When I was writing this document, I realized I had implemented the `Octree` in a wrong and very inneficient way. I was checking every triangle at every region instead of inserting triangles at root and having the real benefit of the `Octree`. I managed to fix in time though. The algorithm time complexity is `O(t*log(n))` where `t` is the number of triangles and `n` is the number of nodes. I did not have time to think about a `Octree` async version.
+When I was writing this document, I realized I had implemented the `Octree` in a wrong and very inneficient way. I was checking every triangle at every region instead of inserting triangles at root and having the real benefit of the `Octree`. I managed to fix it though. The algorithm time complexity is `O(t*log(n))` where `t` is the number of triangles and `n` is the number of nodes. I did not have time yet to think about a `Octree` async version.
 
-The whole processing on the CPU side could be improved if I had used **ECS** and **Jobs System**, but I did not take that path because I do not have experience with them and there was not enough time to research for this project. 
+The whole processing on the CPU side could be improved if I had used **ECS** and **Jobs System**, but I did not take that path because I do not have experience with them and I did not have time to research for this project yet. 
 
 ### Future Work
 
