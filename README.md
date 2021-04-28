@@ -46,7 +46,7 @@ A simple `MonoBehaviour` that generates random colored voxels within a given ran
 
 #### MeshRendererVoxelizerBase
 
-An abstract class (also `MonoBehaviour`) that implements `IVoxelizer` and provides common functionalities to voxelizers that want to use a `MeshRenderer` as source. 
+An abstract class (also `MonoBehaviour`) that implements [`IVoxelizer`](UnityTest/Assets/Scripts/IVoxelizer.cs)  and provides common functionalities to voxelizers that want to use a `MeshRenderer` as source. 
 
 #### MeshRendererNaiveVoxelizer
 
