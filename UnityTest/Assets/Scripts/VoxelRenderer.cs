@@ -58,6 +58,8 @@ namespace VoxelEngine
         public ComputeShader VoxelRendererShader;
         public Light DirectionalLight;
         public float VoxelSize = 0.2f;
+        [Range(0.1f,1.0f)]
+        public float ResolutionScale = 0.5f;
         private int m_KiMain = -1;
         private int m_ScreenWidth;
         private int m_ScreenHeight;
@@ -86,10 +88,11 @@ namespace VoxelEngine
         {
             m_KiMain = VoxelRendererShader.FindKernel("CSMain");
             m_Camera = GetComponent<Camera>();
-            m_ScreenWidth = Screen.width;
-            m_ScreenHeight = Screen.height;
-            m_ThreadGroupsX = Mathf.CeilToInt(Screen.width / m_ThreadNumber);
-            m_ThreadGroupsY = Mathf.CeilToInt(Screen.height / m_ThreadNumber);
+            Screen.SetResolution((int)(Screen.width * ResolutionScale), (int)(Screen.height * ResolutionScale), Screen.fullScreen);
+            m_ScreenWidth = (int)(Screen.width * ResolutionScale);
+            m_ScreenHeight = (int)(Screen.height * ResolutionScale);
+            m_ThreadGroupsX = Mathf.CeilToInt(m_ScreenWidth / m_ThreadNumber);
+            m_ThreadGroupsY = Mathf.CeilToInt(m_ScreenHeight / m_ThreadNumber);
 
             // Same seed for testing.
             Random.InitState(0);
@@ -214,10 +217,11 @@ namespace VoxelEngine
         {
             if (m_ScreenWidth != Screen.width || m_ScreenHeight != Screen.height)
             {
-                m_ScreenWidth = Screen.width;
-                m_ScreenHeight = Screen.height;
-                m_ThreadGroupsX = Mathf.CeilToInt(Screen.width / m_ThreadNumber);
-                m_ThreadGroupsY = Mathf.CeilToInt(Screen.height / m_ThreadNumber);
+                Screen.SetResolution((int)(Screen.width * ResolutionScale), (int)(Screen.height * ResolutionScale), Screen.fullScreen);
+                m_ScreenWidth = (int)(Screen.width * ResolutionScale);
+                m_ScreenHeight = (int)(Screen.height * ResolutionScale);
+                m_ThreadGroupsX = Mathf.CeilToInt(m_ScreenWidth / m_ThreadNumber);
+                m_ThreadGroupsY = Mathf.CeilToInt(m_ScreenHeight / m_ThreadNumber);
             }
         }
 
@@ -295,16 +299,16 @@ namespace VoxelEngine
 
         private void InitRenderTexture()
         {
-            if (m_Target == null || m_Target.width != Screen.width || m_Target.height != Screen.height)
+            if (m_Target == null || m_Target.width != m_ScreenWidth || m_Target.height != m_ScreenHeight)
             {
                 // Release render texture if we already have one.
                 if (m_Target != null)
                 {
                     m_Target.Release();
                 }
-                
+
                 // Get a render target for compute shader.
-                m_Target = new RenderTexture(Screen.width, Screen.height, 24,
+                m_Target = new RenderTexture(m_ScreenWidth, m_ScreenHeight, 24,
                     RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
                 m_Target.enableRandomWrite = true;
                 m_Target.Create();

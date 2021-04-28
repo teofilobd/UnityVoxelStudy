@@ -8,7 +8,6 @@ The objective of this project was to develop a **Voxel Renderer** in **Unity** u
 
 This document is organized in the following sections:
 - <a href="#general-information-">General Information</a>
-- <a href="#usage-">Usage</a>
 - <a href="#android-build-">Android Build</a>
 - <a href="#known-issues-">Known Issues</a>
 - <a href="#challenges-and-future-work-">Challenges and Future Work</a>
@@ -21,7 +20,7 @@ This document is organized in the following sections:
 
 ### Folder structure
 
-This project has the following folder structure under [`Assets`]((UnityTest/Assets/):
+This project has the following folder structure under [`Assets`](UnityTest/Assets/):
 - [`Art`](UnityTest/Assets/Art) - All art assets are here. 
 - [`Scenes`](UnityTest/Assets/Scenes) - With a few demo scenes:
   - `NaiveVoxelizerTest` - Demo scene for a naive voxelizer.
@@ -91,7 +90,7 @@ Simple class with static methods to help to check [AABB-Triangle intersections](
 
 ### Rendering
 
-The voxels are rendered using a `ComputeShader` called [`VoxelRendererShader`](UnityTest/Assets/Scripts/VoxelRendererShader.compute). This shader was adapted from the [Inigo Quilez's](https://iquilezles.org/) shadertoy [raymarching example](https://www.shadertoy.com/view/Xds3zN), where much of it was removed, remaining basically box signed distance functions (SDFs). The shader algorithm can be explained as follows:
+The voxels are rendered using a `ComputeShader` called [`VoxelRendererShader`](UnityTest/Assets/Shaders/VoxelRendererShader.compute). This shader was adapted from the [Inigo Quilez's](https://iquilezles.org/) shadertoy [raymarching example](https://www.shadertoy.com/view/Xds3zN), where much of it was removed, remaining basically box signed distance functions (SDFs). The shader algorithm can be explained as follows:
 - For each pixel in the render target, a ray is traced from the camera passing through it.
   - If the ray hits a bounding box of a voxels volume, get the minimum distance (if any) among all the voxels in the volume and shade using the voxel and volume properties.
 

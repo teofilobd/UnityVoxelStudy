@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657934, g: 0.49641305, b: 0.5748188, a: 1}
+  m_IndirectSpecularColor: {r: 0.1802845, g: 0.22571497, b: 0.30692175, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -255,6 +255,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   VoxelRendererShader: {fileID: 7200000, guid: 53de2d5a8cf46894f9186f27e504a237, type: 3}
   DirectionalLight: {fileID: 1316650002}
+  VoxelSize: 0.1
+  m_ResolutionScale: 0.5
 --- !u!1 &1316650001
 GameObject:
   m_ObjectHideFlags: 0

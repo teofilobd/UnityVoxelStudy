@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/OctreeVoxelizerTest.unity
-    guid: 69c45d2c1da643a42bd372f13c47e49f
+    path: Assets/Scenes/DemoScene.unity
+    guid: 92fff0d1d510c0c4fb843987fda6321b
   m_configObjects: {}
