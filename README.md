@@ -94,11 +94,11 @@ The voxels are rendered using a `ComputeShader` called [`VoxelRendererShader`](U
 - For each pixel in the render target, a ray is traced from the camera passing through it.
   - If the ray hits a bounding box of a voxels volume, get the minimum distance (if any) among all the voxels in the volume and shade using the voxel and volume properties.
 
-This naive implementation raymarching is quite heavy for the purpose of this project, but I will talk more about it in the <a href=#challenges-and-future-work->"Challenges and Future Work"</a> section.
+This naive implementation of raymarching is quite heavy for the purpose of this project, but I will talk more about it in the <a href=#challenges-and-future-work->"Challenges and Future Work"</a> section.
 
 ## Android Build <a href="#summary">↑</a>
 
-The project is configured to support for building for **Android** using **Vulkan** as graphics API. In case you do not want to build it, there is a build called `Voxelizer.apk` available in the folder [`Android`](UnityTest/Android). It is a very simple scene using octree voxelizers.
+The project is configured to support for building for **Android** using **Vulkan** as graphics API. In case you do not want to build it, there is a build called `Voxelizer.apk` available in the folder [`Android`](Android). This build will generate the same image as the picture above. It is a very simple scene using octree voxelizers.
 
 ## Known Issues <a href="#summary">↑</a>
 
@@ -113,7 +113,7 @@ The project is configured to support for building for **Android** using **Vulkan
 When I started to think about the project, I decided to implement a raymarching algorithm for rendering for two reasons: First, because I like playing with raymarching and, second, because I had done it before.
 However, this choice was a bad take. A naive raymarching algorithm is pretty bad for rendering thousands of entities (in our case voxels) without any spatial partitioning technique to support fast querying of voxels. I thought about ways of improving the renderer, but it was too late to implement them. Some of those ideas were:
 - Like I said, implementing a spatial partitioning technique for fast querying of voxels in the compute shader (e.g kD-Tree?, Bounding Volume Hierarchy?).
-- Implementing a tile-based approach, such as those seen in a tile-based GPUs. I would add another kernel to the compute shader that would divide the render target into tiles, and then add each voxel to its corresponding tile. In the main kernel, only voxels belonging to a given tile would be evaluated at time.
+- Implementing a tile-based approach, such as those seen in tile-based GPUs. I would add another kernel to the compute shader that would divide the render target into tiles, and then add each voxel to its corresponding tile. In the main kernel, only voxels belonging to a given tile would be evaluated at time.
 
 In the end, If I still had time I would actually implement another renderer based on the default URP renderer and use `DrawMeshInstancedIndirect` to draw all the voxels with GPU instancing.
 
@@ -134,7 +134,7 @@ As a summary of features that I would like to do in the future, I could say:
 - Implement another renderer using `DrawMeshInstancedIndirect`.
 - Create a custom SRP, stripping out URP features that are not useful for the voxel renderer.
 - Implement voxelizers using ECS and Jobs System.
-- (Actually research how people actually implement voxel renderers :D) 
+- (Actually research about how people actually implement voxel renderers :D) 
 
 ## Contributor <a href="#summary">↑</a>
 
@@ -142,7 +142,7 @@ As a summary of features that I would like to do in the future, I could say:
 
 ## License <a href="#summary">↑</a>
 
-This project is licensed under the [MIT License](/LICENSE.md).
+This project is licensed under the [MIT License](LICENSE).
 
 ## Third Party <a href="#summary">↑</a>
 
