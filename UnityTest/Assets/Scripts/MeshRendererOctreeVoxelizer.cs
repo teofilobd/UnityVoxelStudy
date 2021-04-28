@@ -12,7 +12,7 @@ namespace VoxelEngine
     {
         private Octree m_Octree;
 
-        public override void GenerateVoxels()
+        public override void GenerateVoxels(float voxelSize)
         {
             if (m_MeshRenderer != null && m_MeshFilter != null)
             {
@@ -35,13 +35,13 @@ namespace VoxelEngine
                     UVs = mesh.uv
                 };
 
-                Vector3Int meshDimensionInVoxels = Vector3Int.CeilToInt(meshBoundsWS.size / VoxelRenderer.kVoxelSize);
+                Vector3Int meshDimensionInVoxels = Vector3Int.CeilToInt(meshBoundsWS.size / voxelSize);
                 
                 // In order to keep voxels with uniform size, the max dimension is used as bounds dimension.
                 int maxDimension = Mathf.Max(meshDimensionInVoxels.x, Mathf.Max(meshDimensionInVoxels.y, meshDimensionInVoxels.z));                
-                Vector3 maxPointInVoxelsVolume = meshBoundsWS.min + Vector3.one * maxDimension * VoxelRenderer.kVoxelSize;
+                Vector3 maxPointInVoxelsVolume = meshBoundsWS.min + Vector3.one * maxDimension * voxelSize;
 
-                m_Octree = new Octree(meshBoundsWS.min, maxPointInVoxelsVolume, meshParams);
+                m_Octree = new Octree(meshBoundsWS.min, maxPointInVoxelsVolume, voxelSize, meshParams);
 
                 Queue<Octree.OctreeNode> nodes = new Queue<Octree.OctreeNode>();
 

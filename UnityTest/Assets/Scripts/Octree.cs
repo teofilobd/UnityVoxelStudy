@@ -27,7 +27,7 @@ namespace VoxelEngine
             public Vector2 UV;
             public Color Color;
 
-            public OctreeNode(Vector3 minPoint, Vector3 maxPoint, Vector3[] vertices)
+            public OctreeNode(Vector3 minPoint, Vector3 maxPoint, Vector3[] vertices, float minimumSize)
             {
                 MinPoint = minPoint;
                 MaxPoint = maxPoint;
@@ -39,7 +39,7 @@ namespace VoxelEngine
                 Color = Color.white;
 
                 // If a node reaches a dimension threshold, it becomes a leaf.
-                if(Dimensions.x <= VoxelRenderer.kVoxelDimensions.x)
+                if(Dimensions.x <= minimumSize)
                 {
                     IsLeaf = true;
                 }
@@ -59,6 +59,7 @@ namespace VoxelEngine
         }
 
         public OctreeNode Root;
+        private float m_MinimumSize;
 
         private readonly Vector3[] m_MinPointRegion = new Vector3[]
         {
@@ -88,8 +89,9 @@ namespace VoxelEngine
                 };
         }
 
-        public Octree(Vector3 minPoint, Vector3 maxPoint, MeshParams meshParams)
+        public Octree(Vector3 minPoint, Vector3 maxPoint, float minimumSize, MeshParams meshParams)
         {
+            m_MinimumSize = minimumSize;
             Root = null;
             for (int triangleID = 0; triangleID < meshParams.Triangles.Length; triangleID+=3)
             {
@@ -131,7 +133,7 @@ namespace VoxelEngine
         public OctreeNode ProcessRegion(ref OctreeNode currentNode, Vector3[] nodeVertices, Vector3 minPoint, Vector3 maxPoint, 
             Vector3[] triangleVertices, Vector3 triangleNormal, Vector2 uv, Color color)
         {
-            currentNode ??= new OctreeNode(minPoint, maxPoint, nodeVertices)
+            currentNode ??= new OctreeNode(minPoint, maxPoint, nodeVertices, m_MinimumSize)
             {
                 Occupied = true,
                 UV = uv,

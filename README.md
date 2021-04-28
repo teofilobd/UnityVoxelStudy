@@ -1,6 +1,6 @@
 # Unity Voxelizer
 
-![UnityVoxelizer](https://todo)
+![UnityVoxelizer](Screenshot.png)
 
 The objective of this project was to develop a **Voxel Renderer** in **Unity** using either **Universal Render Pipeline (URP)** or **HD Render Pipeline (HDRP)**. This version uses URP and a compute shader to render voxels using ray marching.
 
@@ -27,6 +27,7 @@ This project has the following folder structure under `Assets`:
   - `NaiveVoxelizerTest` - Demo scene for a naive voxelizer.
   - `OctreeVoxelizerTest` - Demo scene for an octree voxelizer.
   - `VoxelRendererTest` - Demo scene to test the renderer.
+  - `DemoScene` - Demo scene used to take the screenshot above.
 - `Scripts` - All scripts are here.
 - `Shaders` - All shaders are here.
 - `URP` - URP settings assets are here (Forward renderer and Pipeline asset).
@@ -105,7 +106,7 @@ It is a very simple scene using both voxelizers (naive and octree-based).
 
 - **[BUG]** You can control the light direction in the scene, but the orientation in the renderer is different.
 - **[BUG]** Soft shadows have some glitches.
-- **[BUG]** AABB-Triangle intersection check fails if triangles are aligned with boxes faces. 
+- **[BUG]** There are some graphics glitches when voxels overlap.
 - Performance in general is bad, specially in the renderer. This will be discussed in the next section <a href="#challenges-and-future-work-">"Challenges and Future Work"</a>
 
 ## Challenges and Future Work <a href="#summary">↑</a>

@@ -49,7 +49,7 @@ namespace VoxelEngine
                     Vector3 axis = Vector3.Cross(triangleEdges[i], boxNormals[j]);
                     Project(boxVertices, axis, out boxMin, out boxMax);
                     Project(triangleVertices, axis, out triangleMin, out triangleMax);
-                    if (boxMax <= triangleMin || boxMin >= triangleMax)
+                    if (boxMax < triangleMin || boxMin > triangleMax)
                         return false; // No intersection possible
                 }
 

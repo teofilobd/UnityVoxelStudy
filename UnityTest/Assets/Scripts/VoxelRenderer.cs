@@ -57,21 +57,7 @@ namespace VoxelEngine
         #region Properties
         public ComputeShader VoxelRendererShader;
         public Light DirectionalLight;
-        public static float kVoxelSize = 0.2f;
-        public static Vector3 kVoxelDimensions = new Vector3(kVoxelSize, kVoxelSize, kVoxelSize);
-        public static Vector3 kVoxelHalfDimensions = kVoxelDimensions / 2f;
-        public static Vector3[] kVoxelVertices =
-        {
-            Vector3.zero,
-            new Vector3(VoxelRenderer.kVoxelSize, 0, 0),
-            new Vector3(VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize, 0),
-            new Vector3(0, VoxelRenderer.kVoxelSize, 0),
-            new Vector3(0, 0, VoxelRenderer.kVoxelSize),
-            new Vector3(VoxelRenderer.kVoxelSize, 0, VoxelRenderer.kVoxelSize),
-            new Vector3(0, VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize),
-            new Vector3(VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize, VoxelRenderer.kVoxelSize)
-        };
-
+        public float VoxelSize = 0.2f;
         private int m_KiMain = -1;
         private int m_ScreenWidth;
         private int m_ScreenHeight;
@@ -92,6 +78,8 @@ namespace VoxelEngine
         private readonly int m_CameraInverseProjectioPropertyID = Shader.PropertyToID("_CameraInverseProjection");
         private readonly int m_DirectionalLightPropertyID = Shader.PropertyToID("_DirectionalLightDirection");
         private readonly int m_VoxelsCountPropertyID = Shader.PropertyToID("_VoxelsCount");
+        private readonly int m_VoxelsVolumesCountPropertyID = Shader.PropertyToID("_VoxelsVolumesCount");
+        private bool m_FirstExecution = true;
         #endregion
 
         private void Awake()
@@ -142,8 +130,6 @@ namespace VoxelEngine
         }
 
         private void OnDestroy() => UnbindVoxelizers();
-
-        private void OnEnable() => BindVoxelizers();
 
         // This is bad because I'm reconstructing all the buffers every time a voxelizer is bind/unbind.
         // It has to be improved in the future.
@@ -197,14 +183,30 @@ namespace VoxelEngine
             {
                 m_TextureBuffer = CreateTextureArray(new Texture2D[] { Texture2D.whiteTexture });
             }
+
             VoxelRendererShader.SetTexture(m_KiMain, "_TextureBuffer", m_TextureBuffer);
 
-            int stride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Voxel));
-            CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, stride);
-            SetComputeBuffer(m_KiMain, "_Voxels", m_VoxelsBuffer);
+            int voxelsStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Voxel));
+            int volumePropertiesStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(VoxelsVolumeProperties));
+            if (m_Voxels.Count > 0)
+            {
+                CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, voxelsStride);
+                VoxelRendererShader.SetInt(m_VoxelsCountPropertyID, m_Voxels.Count);
+                CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, volumePropertiesStride);
+                VoxelRendererShader.SetInt(m_VoxelsVolumesCountPropertyID, m_VoxelVolumeProperties.Count);
+            }
+            else
+            {
+                // add dummy voxel to allow for compute shader rendering empty scene
+                m_Voxels.Add(new Voxel());
+                CreateComputeBuffer(ref m_VoxelsBuffer, m_Voxels, voxelsStride);
+                VoxelRendererShader.SetInt(m_VoxelsCountPropertyID, 0);
+                m_VoxelVolumeProperties.Add(new VoxelsVolumeProperties());
+                CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, volumePropertiesStride);
+                VoxelRendererShader.SetInt(m_VoxelsVolumesCountPropertyID, 0);
+            }
 
-            stride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(VoxelsVolumeProperties));
-            CreateComputeBuffer(ref m_VoxelsVolumePropertiesBuffer, m_VoxelVolumeProperties, stride);
+            SetComputeBuffer(m_KiMain, "_Voxels", m_VoxelsBuffer);
             SetComputeBuffer(m_KiMain, "_VoxelsVolumeProperties", m_VoxelsVolumePropertiesBuffer);             
         }
 
@@ -254,7 +256,7 @@ namespace VoxelEngine
 
             bool somethingHasChanged = false;
 
-            if (m_Camera.transform.hasChanged)
+            if (m_Camera.transform.hasChanged || m_FirstExecution)
             {
                 VoxelRendererShader.SetMatrix(m_CameraToWorldPropertyID, m_Camera.cameraToWorldMatrix);
                 VoxelRendererShader.SetMatrix(m_CameraInverseProjectioPropertyID, m_Camera.projectionMatrix.inverse);
@@ -263,7 +265,7 @@ namespace VoxelEngine
                 somethingHasChanged = true;
             }
 
-            if (DirectionalLight.transform.hasChanged)
+            if (DirectionalLight.transform.hasChanged || m_FirstExecution)
             {
                 Vector3 lightForward = -DirectionalLight.transform.forward;
                 VoxelRendererShader.SetVector(m_DirectionalLightPropertyID, new Vector4(lightForward.x, lightForward.y, lightForward.z, DirectionalLight.intensity));
@@ -272,17 +274,17 @@ namespace VoxelEngine
                 somethingHasChanged = true;
             }
 
-            if (m_VoxelsBufferNeedUpdate)
+            if (m_VoxelsBufferNeedUpdate || m_FirstExecution)
             {
                 UpdateVoxelsBuffer();
-                VoxelRendererShader.SetInt(m_VoxelsCountPropertyID, m_Voxels.Count);
 
                 m_VoxelsBufferNeedUpdate = false;
                 somethingHasChanged = true;
             }
 
-            if (somethingHasChanged)
+            if (somethingHasChanged || m_FirstExecution)
             {
+                m_FirstExecution = false;
                 VoxelRendererShader.SetTexture(m_KiMain, "Result", m_Target);
                 VoxelRendererShader.Dispatch(m_KiMain, m_ThreadGroupsX, m_ThreadGroupsY, 1);
             }

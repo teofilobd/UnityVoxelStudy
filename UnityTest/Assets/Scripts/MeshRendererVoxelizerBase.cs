@@ -46,8 +46,6 @@ namespace VoxelEngine
 
             VoxelsVolumeMin = m_MeshRenderer.bounds.min;
             VoxelsVolumeMax = m_MeshRenderer.bounds.max;
-
-            GenerateVoxels();
         }
 
         private void OnValidate()
@@ -82,14 +80,16 @@ namespace VoxelEngine
 
         void IVoxelizer.Bind(VoxelRenderer renderer)
         {
+            GenerateVoxels(renderer.VoxelSize);
             renderer.Register(this);
         }
 
         void IVoxelizer.Unbind(VoxelRenderer renderer)
         {
             renderer.Deregister(this);
+            Voxels.Clear();
         }
 
-        public abstract void GenerateVoxels();
+        public abstract void GenerateVoxels(float voxelSize);
     }
 }

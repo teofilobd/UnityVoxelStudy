@@ -63,7 +63,8 @@ float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
 
 float4 _DirectionalLightDirection;
-int _VoxelsCount;
+uint _VoxelsCount;
+uint _VoxelsVolumesCount;
  
 StructuredBuffer<Voxel> _Voxels;
 StructuredBuffer<VoxelsVolumeProperties> _VoxelsVolumeProperties;
@@ -109,10 +110,7 @@ TracingResult scene(in float3 pos)
     result.voxelsVolumePropertiesID = -1;
     result.uv = float2(0, 0);
  
-    uint count = 0, stride = 0;
-    _VoxelsVolumeProperties.GetDimensions(count, stride);
-
-    for (uint volumeID = 0; volumeID < count; ++volumeID)
+    for (uint volumeID = 0; volumeID < _VoxelsVolumesCount; ++volumeID)
     {
         VoxelsVolumeProperties volumeProperties = _VoxelsVolumeProperties[volumeID];
 
@@ -157,14 +155,14 @@ TracingResult raycast(in Ray ray)
         tmax = min(tmax, tp1);
         result.distance = tp1;
         result.m = 1.0;
-        result.color = float3(0.1, 0.1, 0.0);
+        result.color = float3(0.0, 0.3, 0.0);
         result.voxelsVolumePropertiesID = -1;
         result.uv = float2(0, 0);
     }
 
     // raymarch primitives       
     float t = tmin;
-    for (int i = 0; i < 35 && t < tmax; i++)
+    for (int i = 0; i < 70 && t < tmax; i++)
     {
         TracingResult h = scene(ray.origin + ray.direction * t);
         if (abs(h.distance) < (0.0001 * t))
@@ -250,7 +248,7 @@ float3 render(in Ray ray)
         
         // Lighting        
         float3  lightDirection = _DirectionalLightDirection.xyz;
-        col *= sdot(normalDirection, lightDirection);// *calcSoftshadow(pos, lightDirection, 0.02, 2.5);
+        col *= sdot(normalDirection, lightDirection) *calcSoftshadow(pos, lightDirection, 0.02, 2.5);
         
         // Fog
         col = lerp(col, float3(0.7, 0.7, 0.9), 1.0 - exp(-0.0001 * t * t * t));

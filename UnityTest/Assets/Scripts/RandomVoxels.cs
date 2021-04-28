@@ -19,12 +19,7 @@ namespace VoxelEngine
 
         public Vector3 VoxelsVolumeMax { get; private set; }
 
-        void Awake()
-        {
-            GenerateVoxels();
-        }
-
-        void GenerateVoxels()
+        void GenerateVoxels(float voxelSize)
         {
             Voxels = new List<VoxelRenderer.Voxel>();
             Vector3Int voxelVolumeDimensions = (MaxRange - MinRange);
@@ -35,9 +30,9 @@ namespace VoxelEngine
                 VoxelRenderer.Voxel voxel = new VoxelRenderer.Voxel()
                 {
                     Center = new Vector3(Random.Range(MinRange.x, MaxRange.x),
-                                         Random.Range(MinRange.y, MaxRange.y) + VoxelRenderer.kVoxelSize,
-                                         Random.Range(MinRange.z, MaxRange.z)) * 2 * VoxelRenderer.kVoxelSize,
-                    Size = VoxelRenderer.kVoxelSize,
+                                         Random.Range(MinRange.y, MaxRange.y) + voxelSize,
+                                         Random.Range(MinRange.z, MaxRange.z)) * 2 * voxelSize,
+                    Size = voxelSize,
                     Color = new Vector3(Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f)),
                     UV = Vector2.zero
                 };
@@ -63,12 +58,14 @@ namespace VoxelEngine
 
         public void Bind(VoxelRenderer renderer)
         {
+            GenerateVoxels(renderer.VoxelSize);
             renderer.Register(this);
         }
 
         public void Unbind(VoxelRenderer renderer)
         {
-            renderer.Deregister(this);
+            renderer.Deregister(this); 
+            Voxels.Clear();
         }
     }
 }

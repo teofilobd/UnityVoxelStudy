@@ -14,6 +14,9 @@ namespace VoxelEngine
     {
         private VoxelRenderer.Voxel[] m_Voxels;
         private List<Task> m_Tasks = new List<Task>();
+        private Vector3 m_VoxelHalfDimensions;
+        private Vector3[] m_VoxelVertices;
+        protected float m_VoxelSize;
 
         // Helper struct.
         private struct TaskParams
@@ -27,8 +30,22 @@ namespace VoxelEngine
             public Vector2[] UVs;
         }
 
-        public override void GenerateVoxels()
+        public override void GenerateVoxels(float voxelSize)
         {
+            m_VoxelSize = voxelSize;
+            m_VoxelHalfDimensions = new Vector3(voxelSize, voxelSize, voxelSize) * 0.5f;
+            m_VoxelVertices = new Vector3[]
+            {
+                Vector3.zero,
+                new Vector3(voxelSize, 0, 0),
+                new Vector3(voxelSize, voxelSize, 0),
+                new Vector3(0, voxelSize, 0),
+                new Vector3(0, 0, voxelSize),
+                new Vector3(voxelSize, 0, voxelSize),
+                new Vector3(0, voxelSize, voxelSize),
+                new Vector3(voxelSize, voxelSize, voxelSize)
+            };
+            
             CreateVoxels(true);
         }
 
@@ -47,8 +64,8 @@ namespace VoxelEngine
                 InitializeVerticesAndNormals(m_MeshRenderer.transform, mesh.vertices, triangles, out verticesWS, out trianglesNormals);
 
                 Bounds meshBoundsWS = m_MeshRenderer.bounds;
-                Vector3Int meshDimensionInVoxels = Vector3Int.CeilToInt(meshBoundsWS.size / VoxelRenderer.kVoxelSize);                                
-                Vector3 voxelsInitialPosition = meshBoundsWS.min + VoxelRenderer.kVoxelHalfDimensions;
+                Vector3Int meshDimensionInVoxels = Vector3Int.CeilToInt(meshBoundsWS.size / m_VoxelSize);                                
+                Vector3 voxelsInitialPosition = meshBoundsWS.min + m_VoxelHalfDimensions;
 
                 // To avoid issues manipulating the voxels list within threads, this array of voxels will be used.
                 // Each voxel will write to their corresponding id.
@@ -67,7 +84,7 @@ namespace VoxelEngine
                         for (int z = 0; z < meshDimensionInVoxels.z; ++z)
                         {
                             currentVoxelID++;
-                            Vector3 voxelCenter = voxelsInitialPosition + new Vector3(x, y, z) * VoxelRenderer.kVoxelSize;
+                            Vector3 voxelCenter = voxelsInitialPosition + new Vector3(x, y, z) * m_VoxelSize;
                             
                             TaskParams taskParams = new TaskParams()
                             {
@@ -113,7 +130,7 @@ namespace VoxelEngine
             Color[] colors = voxelParams.Colors;
             Vector2[] uvs = voxelParams.UVs;
 
-            Vector3 voxelMinPosition = voxelCenter - VoxelRenderer.kVoxelHalfDimensions;
+            Vector3 voxelMinPosition = voxelCenter - m_VoxelHalfDimensions;
             Vector3[] triangleVertices = new Vector3[3];
 
             for (int triangleId = 0; triangleId < triangles.Length; triangleId += 3)
@@ -129,8 +146,8 @@ namespace VoxelEngine
 
                 Vector3 triangleNormal = trianglesNormals[triangleId / 3];
 
-                if (MathHelper.CheckAABBAndTriangleIntersection(VoxelRenderer.kVoxelVertices[0], VoxelRenderer.kVoxelVertices[7], triangleVertices,
-                    VoxelRenderer.kVoxelVertices, triangleNormal))
+                if (MathHelper.CheckAABBAndTriangleIntersection(m_VoxelVertices[0], m_VoxelVertices[7], triangleVertices,
+                    m_VoxelVertices, triangleNormal))
                 {
                     Vector2 uv = Vector2.zero;
                     Color color = Material.Color;
@@ -148,7 +165,7 @@ namespace VoxelEngine
                     VoxelRenderer.Voxel voxel = new VoxelRenderer.Voxel
                     {
                         Center = voxelCenter,
-                        Size = VoxelRenderer.kVoxelSize,
+                        Size = m_VoxelSize,
                         Color = new Vector3(color.r, color.g, color.b),
                         UV = uv,
                     };
